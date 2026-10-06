@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
-const root = resolve(import.meta.dirname, '..');
+const root = fileURLToPath(new URL('../', import.meta.url));
 const directory = mkdtempSync(join(tmpdir(), 'streamsplit-consumer-'));
 const env = { ...process.env, npm_config_cache: join(root, '.npm-cache') };
 try {
