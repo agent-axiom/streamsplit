@@ -26,3 +26,13 @@ test('the short README example works from a built checkout', () => {
   assert.ok(example, 'Expected one runnable JavaScript quickstart.');
   execFileSync(process.execPath, ['--input-type=module', '--eval', example[1]], { cwd: root, stdio: 'pipe' });
 });
+
+
+test('the short demo proves the broken fixture and its fixed replay', () => {
+  const output = execFileSync(process.execPath, ['examples/demo-short.mjs'], { cwd: root, encoding: 'utf8' });
+  assert.match(output, /WHOLE BUFFER: PASS/);
+  assert.match(output, /SPLIT UTF-8: FAIL/);
+  assert.match(output, /Reduced chunk sizes: \[13,7\]/);
+  assert.match(output, /FIXED: PASS/);
+  assert.match(output, /73 tested schedules/);
+});

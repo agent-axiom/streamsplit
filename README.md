@@ -8,7 +8,7 @@
 [![Runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-brightgreen)](package.json)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Usage](docs/USAGE.md) · [API](docs/API.md) · [Design](docs/DESIGN.md) · [Safety](docs/SAFETY.md) · [Contributing](CONTRIBUTING.md) · [For agents](AGENTS.md)
+[Usage](docs/USAGE.md) · [API](docs/API.md) · [Design](docs/DESIGN.md) · [Integrations](docs/INTEGRATIONS.md) · [Safety](docs/SAFETY.md) · [Contributing](CONTRIBUTING.md) · [For agents](AGENTS.md)
 
 A read boundary is not a message boundary. Split a UTF-8 character, CRLF pair, JSON record, or SSE frame in the wrong place and a parser can silently change its output.
 
@@ -21,13 +21,15 @@ StreamSplit tests your existing parser in process, compares its ordered events, 
 - **Reproducible failures:** repeat unstable outcomes, reduce boundaries, replay exact input bytes
 - **Small footprint:** ESM + TypeScript, synchronous or asynchronous parsers, zero runtime dependencies
 
+![20-second demo: whole-buffer pass, split UTF-8 failure, one-line fix, exact replay pass](docs/assets/demo.gif)
+
 ## Try it
 
 ```sh
 git clone https://github.com/agent-axiom/streamsplit.git
 cd streamsplit
 npm ci
-npm run demo
+npm run demo:short
 ```
 
 The demo catches a broken UTF-8 decoder in SSE, reproduces a two-chunk failure, then checks fixed SSE and NDJSON parsers.
@@ -59,4 +61,4 @@ Fixtures contain exact input bytes and may contain secrets. The runtime has no t
 
 `npm run check` runs regression tests, strict API type checks, and a clean packed-package consumer. CI covers Node 20, 22, and 24.
 
-Not yet published to npm. Build an installable archive with `npm pack`; see [installation](docs/USAGE.md#try-it). Licensed under [MIT](LICENSE).
+Not yet published to npm. Build an installable archive with `npm pack`; see [installation](docs/USAGE.md#try-it) and [release readiness](docs/RELEASING.md). Licensed under [MIT](LICENSE).

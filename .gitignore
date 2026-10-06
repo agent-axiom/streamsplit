@@ -3,3 +3,4 @@ dist/
 .npm-cache/
 *.tgz
 coverage/
+release/

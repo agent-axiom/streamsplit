@@ -25,6 +25,8 @@ npm pack
 npm install --save-dev /path/to/agent-axiom-streamsplit-0.1.0.tgz
 ```
 
+The [20-second visual demo](assets/demo.gif) is rendered from real synthetic-fixture output. Reproduce the underlying checks with `npm run demo:short`; regenerate the optional animation with `npm run build && python3 scripts/render-demo.py` (Python/Pillow and DejaVu fonts required only for rendering).
+
 ## One assertion
 
 Adapt your parser once. Return a **new, independent parser for every call** to the factory. Emit one value per semantic record, with all final buffered output flushed in `end()`.

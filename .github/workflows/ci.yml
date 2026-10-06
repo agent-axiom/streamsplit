@@ -25,3 +25,16 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm run demo
+  integration-v4:
+    name: eventsource-parser 4.1.1 / Node 22
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm install --no-save --package-lock=false --ignore-scripts eventsource-parser@4.1.1
+      - run: npm run build
+      - run: node --test test/integrations.test.mjs

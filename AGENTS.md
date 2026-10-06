@@ -6,7 +6,8 @@ StreamSplit is a small in-process byte-chunk invariance test helper. Read only t
 
 | Task | Start here |
 | --- | --- |
-| Adapt a streaming parser or replay a fixture | [docs/USAGE.md](docs/USAGE.md) |
+| Adapt a streaming parser or replay a fixture | [docs/USAGE.md](docs/USAGE.md), [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
+| Prepare a release candidate without publishing | [docs/RELEASING.md](docs/RELEASING.md) |
 | Change options, outputs, comparison, or error behavior | [docs/API.md](docs/API.md), [src/types.ts](src/types.ts) |
 | Change execution, schedules, or reduction | [docs/DESIGN.md](docs/DESIGN.md), [src/index.ts](src/index.ts), [src/schedules.ts](src/schedules.ts) |
 | Handle private fixtures, bounds, or timeouts | [docs/SAFETY.md](docs/SAFETY.md) |
@@ -18,6 +19,7 @@ StreamSplit is a small in-process byte-chunk invariance test helper. Read only t
 - Full verification: `npm run check`
 - Realistic broken/fixed examples: `npm run demo`
 - Build package archive: `npm pack`
+- Full release-candidate check: `npm run release:check`
 
 ## Preserve these contracts
 

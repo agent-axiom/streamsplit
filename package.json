@@ -46,9 +46,18 @@
     "test:package": "node scripts/test-package.mjs",
     "check": "npm test && npm run test:types && npm run test:package",
     "demo": "npm run build && node examples/demo.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "demo:short": "npm run build && node examples/demo-short.mjs",
+    "test:integrations": "npm run build && node --test test/integrations.test.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "prepublishOnly": "npm run check"
   },
   "devDependencies": {
+    "eventsource-parser": "3.0.6",
+    "ndjson": "2.0.0",
     "typescript": "5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
