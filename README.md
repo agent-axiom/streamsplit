@@ -3,6 +3,7 @@
 **Find streaming-parser bugs that only appear when bytes arrive in pieces.**
 
 [![CI](https://github.com/agent-axiom/streamsplit/actions/workflows/ci.yml/badge.svg)](https://github.com/agent-axiom/streamsplit/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%40agent-axiom%2Fstreamsplit?logo=npm)](https://www.npmjs.com/package/@agent-axiom/streamsplit)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=nodedotjs&logoColor=white)](package.json)
 [![Runtime dependencies](https://img.shields.io/badge/runtime_dependencies-0-brightgreen)](package.json)
@@ -61,4 +62,8 @@ Fixtures contain exact input bytes and may contain secrets. The runtime has no t
 
 `npm run check` runs regression tests, strict API type checks, and a clean packed-package consumer. CI covers Node 20, 22, and 24.
 
-Not yet published to npm. Build an installable archive with `npm pack`; see [installation](docs/USAGE.md#try-it) and [release readiness](docs/RELEASING.md). Licensed under [MIT](LICENSE).
+```sh
+npm install @agent-axiom/streamsplit
+```
+
+Available on [npm](https://www.npmjs.com/package/@agent-axiom/streamsplit). You can also build an installable archive with `npm pack`; see [installation](docs/USAGE.md#try-it) and [release readiness](docs/RELEASING.md). Licensed under [MIT](LICENSE).
