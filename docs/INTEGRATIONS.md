@@ -2,7 +2,7 @@
 
 [Home](../README.md) · [Usage](USAGE.md) · [API](API.md) · [Safety](SAFETY.md)
 
-These are compatibility tests maintained in this repository, not claims of adoption or endorsement by upstream projects. Both packages are development-only dependencies; StreamSplit's published runtime still has none.
+These are compatibility tests maintained in this repository, not claims of adoption or endorsement by upstream projects. All three packages are development-only dependencies; StreamSplit's published runtime still has none.
 
 ## Verified targets
 
@@ -11,12 +11,16 @@ These are compatibility tests maintained in this repository, not claims of adopt
 | [eventsource-parser](https://github.com/rexxars/eventsource-parser) | 3.0.6 on Node 20/22/24 | `createParser({onEvent})`, `feed(text)`, `reset({consume: true})` |
 | [eventsource-parser](https://github.com/rexxars/eventsource-parser) | 4.1.1 on Node 22 | Same adapter; v4 requires Node >=22.12 |
 | [ndjson](https://github.com/ndjson/ndjson.js) | 2.0.0 on Node 20/22/24 | Transform stream, awaited writes, readable completion |
+| [@streamparser/json](https://github.com/juanjoDiaz/streamparser-json) | 0.0.26 on Node 20/22/24 | `JSONParser`, byte `write`, `onValue`, guarded `end` |
 
 Versions are pinned in `package-lock.json` and the explicit v4 CI job. Current-source APIs and supported engines are documented by [eventsource-parser](https://github.com/rexxars/eventsource-parser/blob/main/package.json) and [ndjson](https://github.com/ndjson/ndjson.js/blob/master/package.json). This is fixture-specific compatibility evidence, not a conformance suite for either project.
 
 ```sh
 npm ci
 npm run test:integrations
+npm run example:sse     # broken decoding → exact replay → fixed adapter
+npm run example:ndjson  # real Transform, CRLF, Unicode, final record at EOF
+npm run example:json    # real JSONParser, selected array elements
 ```
 
 To repeat the v4 check on Node 22.12 or newer:
@@ -42,6 +46,16 @@ The tests check expected data, event types, IDs, comments, retry values, multili
 Feed byte chunks directly to `ndjson.parse()`. Its decoder handles UTF-8. Await each write callback and the readable `end` event, capture stream errors, and propagate any harness emission failure rather than swallowing it in the data listener. Do not resolve `end()` before final buffered records have been emitted.
 
 The tests assert the actual expected Unicode records, split CRLF handling, blank lines, and the final record without a trailing newline. An invalid record fixture uses explicit `errorPolicy: 'compare'` to check the error and emitted prefix together.
+
+## Streaming JSON: choose complete values and preserve EOF
+
+[Complete adapter source](https://github.com/agent-axiom/streamsplit/blob/main/examples/integrations/stream-json.mjs) · [Runnable examples](https://github.com/agent-axiom/streamsplit/blob/main/examples/integrations/demo.mjs)
+
+The pinned `@streamparser/json` accepts `Uint8Array` directly. A fresh `JSONParser` uses `paths: ['$']` for complete roots or `paths: ['$.*']` for array elements. Emit the callback's `value`, not its live `parent`/`stack` structures. `keepStack: false` avoids retaining already-emitted siblings. Partial-preview callbacks are deliberately disabled: their timing and count may depend on chunk boundaries.
+
+Call `end()` unless `isEnded` is already true. A root number needs EOF to finish, while a complete object can end the parser earlier. `separator: ''` explicitly enables concatenated roots. See the [upstream API and lifecycle](https://github.com/juanjoDiaz/streamparser-json/tree/main/packages/plainjs).
+
+Tests assert exact values for UTF-8, escaped quotes/newlines, escaped surrogate pairs, exponent numbers, arrays, booleans, null, selected elements, and concatenated documents. A truncated array checks both the completed prefix and EOF error using `errorPolicy: 'compare'`; harness emission errors must still propagate. These are integration examples, not a claim that every possible input or partition was tested.
 
 ## A useful boundary: diagnostic callbacks can differ intentionally
 

@@ -76,3 +76,37 @@ test('real ndjson Transform: invalid fixtures compare parser errors without swal
 test('real ndjson Transform: adapter propagates harness emission limits', async () => {
   await assert.rejects(assertChunkInvariant({ input: bytes('{"a":1}\n'), createParser: ndjsonAdapter, maxEvents: 0 }), LimitExceededError);
 });
+
+// This parser consumes bytes directly, including split UTF-8 sequences.
+import { streamJsonAdapter } from '../examples/integrations/stream-json.mjs';
+
+for (const [name, text, expected, options] of [
+  ['nested values and escaped Unicode', '{"city":"東京 🌍","escaped":"\\uD83C\\uDF0D","text":"a\\\"b\\nc","n":-1.25e+3,"ok":true,"empty":null}', [{ city: '東京 🌍', escaped: '🌍', text: 'a"b\nc', n: -1250, ok: true, empty: null }], {}],
+  ['array element selection', '[{"city":"東京"},{"emoji":"🌍"},false,null,[1,2]]', [{ city: '東京' }, { emoji: '🌍' }, false, null, [1, 2]], { paths: ['$.*'] }],
+  ['a final number flushed at EOF', '-1.25e+3', [-1250], {}],
+  ['concatenated root records', '{"a":"café"}{"b":"🌍"}', [{ a: 'café' }, { b: '🌍' }], { separator: '' }],
+]) {
+  test(`real @streamparser/json: ${name}`, async () => {
+    const input = bytes(text);
+    const createParser = emit => streamJsonAdapter(emit, options);
+    assert.deepEqual(await collect(input, createParser), expected);
+    const coverage = await assertChunkInvariant({ input, createParser, seed: 2026 });
+    assert.equal(coverage.allSingleCutsChecked, true);
+    assert.equal(coverage.bytewiseChecked, true);
+  });
+}
+
+test('real @streamparser/json: truncated input preserves the emitted prefix and EOF error', async () => {
+  const input = bytes('[{"ok":"🌍"},{"unfinished":');
+  const createParser = emit => streamJsonAdapter(emit, { paths: ['$.*'] });
+  const events = [];
+  const parser = createParser(value => events.push(value));
+  parser.write(input);
+  assert.throws(() => parser.end());
+  assert.deepEqual(events, [{ ok: '🌍' }]);
+  await assertChunkInvariant({ input, createParser, errorPolicy: 'compare' });
+});
+
+test('real @streamparser/json: adapter propagates harness emission limits', async () => {
+  await assert.rejects(assertChunkInvariant({ input: bytes('{"a":1}'), createParser: streamJsonAdapter, maxEvents: 0 }), LimitExceededError);
+});
