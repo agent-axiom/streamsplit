@@ -49,3 +49,15 @@ for (const name of ['sse', 'ndjson', 'json']) {
     }
   });
 }
+
+
+test('installation guides use the published package as a development dependency', () => {
+  const { name } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const usage = readFileSync(join(root, 'docs/USAGE.md'), 'utf8');
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  for (const document of [readme, usage]) {
+    assert.ok(document.includes(`npm install --save-dev ${name}`));
+  }
+  assert.doesNotMatch(usage, /not published to the npm registry yet/i);
+  assert.match(usage, /not included in the npm archive/);
+});

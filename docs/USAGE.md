@@ -16,7 +16,15 @@ npm run check
 
 The demo detects a broken UTF-8 decoder, reduces the failure to two chunks, replays it, and checks the fixed SSE and NDJSON versions. The example parsers are intentionally small and are not production protocol implementations.
 
-This package is **not published to the npm registry yet**. To use the verified package in another project:
+Install the published package as a development dependency in your project:
+
+```sh
+npm install --save-dev @agent-axiom/streamsplit
+```
+
+The assertion below uses the package's public import and works outside this repository. The `examples/` directory and `example:*` commands belong to a source checkout; they are not included in the npm archive.
+
+To try unreleased repository changes before publication, build and install a local archive:
 
 ```sh
 # In this repository:
