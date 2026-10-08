@@ -33,7 +33,9 @@ npm ci
 npm run demo:short
 ```
 
-The demo catches a broken UTF-8 decoder in SSE, reproduces a two-chunk failure, then checks fixed SSE and NDJSON parsers.
+The demo catches a broken UTF-8 decoder in SSE, reproduces a two-chunk failure, then replays it with the fix.
+
+Try three real parser integrations: `npm run example:sse`, `npm run example:ndjson`, and `npm run example:json`. [Adapters, edge cases, and tested versions →](docs/INTEGRATIONS.md)
 
 ## One assertion
 

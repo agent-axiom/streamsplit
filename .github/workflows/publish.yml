@@ -1,0 +1,76 @@
+name: Publish approved npm release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+concurrency:
+  group: npm-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+jobs:
+  candidate:
+    # Disabled until a maintainer separately approves/configures OIDC and protections.
+    if: github.repository == 'agent-axiom/streamsplit' && vars.NPM_PUBLISH_ENABLED == 'true' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      source-sha: ${{ steps.source.outputs.sha }}
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # Deliberately no dependency cache in release jobs.
+      - name: Verify tag, version, clean source, and main ancestry
+        id: source
+        run: |
+          node scripts/verify-release.mjs source
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - run: npm ci --ignore-scripts
+      - run: npm run release:check
+      - run: node scripts/verify-release.mjs candidate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-candidate-${{ steps.source.outputs.sha }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+  publish:
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Configure required reviewers, prevent self-review, and restrict tags BEFORE enabling.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.candidate.outputs.source-sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-candidate-${{ needs.candidate.outputs.source-sha }}
+          path: release/
+      - name: Check OIDC-capable npm and exact candidate
+        run: |
+          node -e 'const [a,b,c] = process.argv[1].split(".").map(Number); if (a < 11 || (a === 11 && (b < 5 || (b === 5 && c < 1)))) process.exit(1)' "$(npm --version)"
+          node scripts/verify-release.mjs candidate
+      - name: Publish verified tarball through OIDC
+        # Uses only the verified archive; package lifecycle scripts are disabled.
+        run: npm publish "release/agent-axiom-streamsplit-$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version').tgz" --access public --ignore-scripts --registry=https://registry.npmjs.org
+      - name: Verify registry integrity and provenance metadata
+        run: node scripts/verify-release.mjs registry

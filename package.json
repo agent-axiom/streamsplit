@@ -50,9 +50,13 @@
     "demo:short": "npm run build && node examples/demo-short.mjs",
     "test:integrations": "npm run build && node --test test/integrations.test.mjs",
     "release:check": "node scripts/release-check.mjs",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npm run check",
+    "example:sse": "npm run build && node examples/integrations/demo.mjs sse",
+    "example:ndjson": "npm run build && node examples/integrations/demo.mjs ndjson",
+    "example:json": "npm run build && node examples/integrations/demo.mjs json"
   },
   "devDependencies": {
+    "@streamparser/json": "0.0.26",
     "eventsource-parser": "3.0.6",
     "ndjson": "2.0.0",
     "typescript": "5.9.3"

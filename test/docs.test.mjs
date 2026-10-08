@@ -36,3 +36,16 @@ test('the short demo proves the broken fixture and its fixed replay', () => {
   assert.match(output, /FIXED: PASS/);
   assert.match(output, /73 tested schedules/);
 });
+
+for (const name of ['sse', 'ndjson', 'json']) {
+  test(`the runnable ${name} integration example checks its expected output`, () => {
+    const output = execFileSync(process.execPath, ['examples/integrations/demo.mjs', name], { cwd: root, encoding: 'utf8' });
+    assert.match(output, /expected semantic output/);
+    assert.match(output, /PASS: \d+ schedules; every single cut and bytewise reads checked/);
+    if (name === 'sse') {
+      assert.match(output, /BROKEN: split UTF-8/);
+      assert.match(output, /REPLAY: exact chunk sizes \[13,7\]/);
+      assert.match(output, /exact fixture now passes/);
+    }
+  });
+}
