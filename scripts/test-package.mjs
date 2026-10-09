@@ -18,7 +18,8 @@ try {
   assert.equal(files.some(file => /^(test|examples|scripts|node_modules|\.github)\//.test(file.path)), false);
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
   execFileSync('npm', ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', join(directory, filename)], { cwd: directory, env, stdio: 'pipe' });
-  const consumer = `import { assertChunkInvariant, checkChunkInvariant, replayChunkInvariant } from '@agent-axiom/streamsplit';
+  const consumer = `import { assertChunkInvariant, checkChunkInvariant, replayChunkInvariant, CheckAbortedError } from '@agent-axiom/streamsplit';
+import assert from 'node:assert/strict';
 const input = new TextEncoder().encode('package consumer');
 const coverage = await assertChunkInvariant({ input, createParser: emit => {
   const parts = []; return { write(chunk) { parts.push(...chunk); }, end() { emit(parts); } };
@@ -29,13 +30,19 @@ const result = await checkChunkInvariant({ input, createParser: broken });
 if (result.ok) throw Error('Broken parser passed');
 const replay = await replayChunkInvariant({ fixture: result.failure.fixture, createParser: broken });
 if (replay.ok) throw Error('Replay did not reproduce');
-console.log('Packed ESM consumer and replay passed.');\n`;
+await assert.rejects(checkChunkInvariant({ input, createParser: broken, signal: AbortSignal.abort('private') }), CheckAbortedError);
+await assert.rejects(replayChunkInvariant({ fixture: result.failure.fixture, createParser: broken, signal: AbortSignal.abort() }), CheckAbortedError);
+console.log('Packed ESM consumer, replay, and cancellation passed.');\n`;
   writeFileSync(join(directory, 'consumer.mjs'), consumer);
   execFileSync(process.execPath, ['consumer.mjs'], { cwd: directory, stdio: 'inherit' });
-  writeFileSync(join(directory, 'consumer.mts'), `import { assertChunkInvariant, type ParserFactory } from '@agent-axiom/streamsplit';
+  writeFileSync(join(directory, 'consumer.mts'), `import { assertChunkInvariant, replayChunkInvariant, CheckAbortedError, StreamSplitError, type ParserFactory, type ReplayOptions } from '@agent-axiom/streamsplit';
 const createParser: ParserFactory<number> = emit => ({ write(chunk) { emit(chunk.length); } });
-const coverage = await assertChunkInvariant({ input: new Uint8Array(), createParser });
+const signal = new AbortController().signal;
+const coverage = await assertChunkInvariant({ input: new Uint8Array(), createParser, signal });
 coverage.parserRuns satisfies number;
+const replay: ReplayOptions<number> = { fixture: { version: 1, inputHex: '', chunkSizes: [0], seed: 0, errorPolicy: 'reject' }, createParser, signal };
+await replayChunkInvariant(replay);
+new CheckAbortedError() satisfies StreamSplitError;
 // @ts-expect-error Text input is not a byte fixture.
 await assertChunkInvariant({ input: 'no', createParser });\n`);
   execFileSync(process.execPath, [join(root, 'node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'consumer.mts'], { cwd: directory, stdio: 'inherit' });

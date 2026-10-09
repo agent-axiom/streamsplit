@@ -19,6 +19,7 @@ All offsets and sizes are bytes. `createParser(emit)` must return a new object w
 - `ConfigurationError`: invalid options, factory contract, schedules, or replay schema.
 - `LimitExceededError`: input/output/execution budget exceeded.
 - `ParserTimeoutError`: elapsed per-run deadline exceeded.
+- `CheckAbortedError`: the supplied `AbortSignal` was aborted; cancellation never returns a partial pass or failure.
 - `InvalidEventError`: unsupported output or normalization failure.
 
 These extend `StreamSplitError`. Keep harness failures separate from parser failures. All public types ship in the package declarations.
@@ -62,10 +63,27 @@ For deliberately invalid fixtures, opt into `errorPolicy: 'compare'`. Outcomes m
 | `maxEvents` | `10000` | Emitted events per run |
 | `maxOutputCharacters` | `1048576` | Canonical JSON characters per run, including normalized errors |
 | `timeoutMs` | `2000` | Elapsed deadline for each parser run |
+| `signal` | none | Optional `AbortSignal` to cancel checking or exact fixture replay |
 
 A schedule's nonnegative integer sizes must sum to the exact byte length. Sizes of zero call `write(new Uint8Array())`. Empty input gets one empty baseline write. Custom and generated schedules are deduplicated, and the baseline is not retested as a candidate.
 
 Coverage reports the seed, bytes, schedules checked, parser runs/calls, number of single cuts actually checked, `allSingleCutsChecked`, and `bytewiseChecked`. A failure's coverage reflects work up to that failure, including reduction calls. Reaching an execution budget during normal checking throws `LimitExceededError`; it never returns a partial pass. Setting all schedule generators off is allowed, but only checks baseline stability unless you supply custom schedules.
 
 `generateSchedules(inputLength, options)` exposes the deterministic schedule generator for inspection. Generated partitions vary small-read and broader-read scales; they are not a uniform sample of all possible partitions. Empty-chunk testing is a documented stress case; set `emptyChunks: false` if your adapter deliberately excludes it.
+
+## Cancellation
+
+Pass an `AbortSignal` to any asynchronous entry point to stop a check, assertion, or replay when its caller cancels:
+
+```ts
+const controller = new AbortController();
+const pending = checkChunkInvariant({ input, createParser, signal: controller.signal });
+// For example, call this from your test runner's cancellation handler:
+controller.abort();
+await pending; // rejects with CheckAbortedError
+```
+
+A pre-aborted signal rejects before the parser factory runs. A live signal can stop pending factory/write/end operations, schedule checking, stability checks, and reduction. Cancellation also wins if a parser or normalization hook aborts the signal before returning or throwing. It is a harness error even under `errorPolicy: 'compare'`; no partial result is returned. The error does not copy the signal's reason or attach it as a cause, because it may contain private data.
+
+Cancellation stops the harness from starting further parser calls. It does not forcibly terminate pending parser work, interrupt blocked synchronous JavaScript, or defeat microtask starvation. Give the same signal to your adapter's own cancellable I/O when needed. Later emissions are ignored, and later promise rejections remain handled. StreamSplit removes its own abort listeners after each lifecycle call, without removing caller listeners. Signals are not saved in replay fixtures; pass a new signal when replaying.
 
