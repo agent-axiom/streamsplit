@@ -52,7 +52,7 @@ await assertChunkInvariant({
 });
 ```
 
-Return a **fresh parser on every factory call**. Emit complete semantic events and flush remaining output in `end()`. [Adapt your parser, install the tarball, and replay failures →](docs/USAGE.md)
+Return a **fresh parser on every factory call**. Emit complete semantic events and flush remaining output in `end()`. [Install the package, adapt your parser, and replay failures →](docs/USAGE.md)
 
 ## Know the limits
 
@@ -65,7 +65,7 @@ Fixtures contain exact input bytes and may contain secrets. The runtime has no t
 `npm run check` runs regression tests, strict API type checks, and a clean packed-package consumer. CI covers Node 20, 22, and 24.
 
 ```sh
-npm install @agent-axiom/streamsplit
+npm install --save-dev @agent-axiom/streamsplit
 ```
 
 Available on [npm](https://www.npmjs.com/package/@agent-axiom/streamsplit). You can also build an installable archive with `npm pack`; see [installation](docs/USAGE.md#try-it) and [release readiness](docs/RELEASING.md). Licensed under [MIT](LICENSE).
