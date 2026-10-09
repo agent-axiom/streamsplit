@@ -30,7 +30,7 @@ To try unreleased repository changes before publication, build and install a loc
 # In this repository:
 npm pack
 # In your project, substituting the actual archive path:
-npm install --save-dev /path/to/agent-axiom-streamsplit-0.1.0.tgz
+npm install --save-dev /path/to/agent-axiom-streamsplit-0.1.1.tgz
 ```
 
 The [20-second visual demo](assets/demo.gif) is rendered from real synthetic-fixture output. Reproduce the underlying checks with `npm run demo:short`; regenerate the optional animation with `npm run build && python3 scripts/render-demo.py` (Python/Pillow and DejaVu fonts required only for rendering).

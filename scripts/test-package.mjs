@@ -14,6 +14,7 @@ try {
   assert.ok(files.some(file => file.path === 'dist/index.js'));
   assert.ok(files.some(file => file.path === 'dist/index.d.ts'));
   assert.ok(files.some(file => file.path === 'LICENSE'));
+  assert.ok(files.some(file => file.path === 'CHANGELOG.md'));
   assert.equal(files.some(file => /^(test|examples|scripts|node_modules|\.github)\//.test(file.path)), false);
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
   execFileSync('npm', ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', join(directory, filename)], { cwd: directory, env, stdio: 'pipe' });

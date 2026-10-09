@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const documents = ['README.md', 'CONTRIBUTING.md', 'AGENTS.md', ...readdirSync(join(root, 'docs')).filter(name => name.endsWith('.md')).map(name => `docs/${name}`)];
+const documents = ['README.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'AGENTS.md', ...readdirSync(join(root, 'docs')).filter(name => name.endsWith('.md')).map(name => `docs/${name}`)];
 
 test('human and agent documentation links resolve locally', () => {
   for (const document of documents) {
@@ -60,4 +60,15 @@ test('installation guides use the published package as a development dependency'
   }
   assert.doesNotMatch(usage, /not published to the npm registry yet/i);
   assert.match(usage, /not included in the npm archive/);
+});
+
+
+test('release metadata and packaged changelog match the current version', () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
+  assert.equal(lock.version, pkg.version);
+  assert.equal(lock.packages[''].version, pkg.version);
+  assert.equal(lock.packages[''].name, pkg.name);
+  assert.ok(pkg.files.includes('CHANGELOG.md'));
+  assert.ok(readFileSync(join(root, 'CHANGELOG.md'), 'utf8').includes(`## ${pkg.version}\n`));
 });
