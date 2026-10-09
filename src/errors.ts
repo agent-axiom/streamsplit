@@ -9,6 +9,11 @@ export class StreamSplitError extends Error {
 export class ConfigurationError extends StreamSplitError {}
 export class LimitExceededError extends StreamSplitError {}
 export class ParserTimeoutError extends StreamSplitError {}
+export class CheckAbortedError extends StreamSplitError {
+  constructor() {
+    super('StreamSplit check was aborted. Pending parser work is not forcibly cancelled.');
+  }
+}
 export class InvalidEventError extends StreamSplitError {}
 export class NonDeterministicParserError extends StreamSplitError {
   constructor(readonly chunkSizes: readonly number[]) {

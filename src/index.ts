@@ -1,4 +1,4 @@
-import { BaselineParserError, ChunkInvariantError, ConfigurationError, InvalidEventError, LimitExceededError, NonDeterministicParserError, ParserTimeoutError, StreamSplitError } from './errors.js';
+import { BaselineParserError, CheckAbortedError, ChunkInvariantError, ConfigurationError, InvalidEventError, LimitExceededError, NonDeterministicParserError, ParserTimeoutError, StreamSplitError } from './errors.js';
 import { snapshot } from './json.js';
 import { cutsToSizes, generateSchedules, integer, settings, sizesToCuts, validateSizes } from './schedules.js';
 import type { CheckOptions, CheckResult, Coverage, JsonValue, Outcome, ReproFixture, Schedule } from './types.js';
@@ -17,6 +17,10 @@ const same = (a: Recorded, b: Recorded): boolean => a.key === b.key;
 export async function checkChunkInvariant<T>(options: CheckOptions<T>): Promise<CheckResult> {
   if (!options || !(options.input instanceof Uint8Array)) throw new ConfigurationError('input must be a Uint8Array.');
   if (typeof options.createParser !== 'function') throw new ConfigurationError('createParser must be a function.');
+  const signal = options.signal;
+  if (signal !== undefined && !(signal instanceof AbortSignal)) throw new ConfigurationError('signal must be an AbortSignal.');
+  const throwIfAborted = (): void => { if (signal?.aborted) throw new CheckAbortedError(); };
+  throwIfAborted();
   const config = settings(options);
   const maxInputBytes = integer('maxInputBytes', options.maxInputBytes ?? 1048576, 0, 0x7fffffff);
   const maxRuns = integer('maxRuns', options.maxRuns ?? 512, 2, 1000000);
@@ -40,6 +44,7 @@ export async function checkChunkInvariant<T>(options: CheckOptions<T>): Promise<
     allSingleCutsChecked: input.length <= 1, bytewiseChecked: input.length <= 1,
   };
   const run = async (sizes: readonly number[]): Promise<Recorded> => {
+    throwIfAborted();
     if (coverage.parserRuns >= maxRuns) throw new LimitExceededError('maxRuns exhausted before the check completed. Increase maxRuns or reduce the requested schedules.');
     coverage.parserRuns++;
     const events: JsonValue[] = [];
@@ -49,43 +54,59 @@ export async function checkChunkInvariant<T>(options: CheckOptions<T>): Promise<
     let emitFailure: StreamSplitError | undefined;
     const deadline = performance.now() + timeoutMs;
     const emit = (event: T): void => {
-      if (!active) return; // No unhandled late-emission error after a rejected asynchronous operation.
+      if (!active || signal?.aborted) return; // Ignore late emissions, including before the abort race settles.
       try {
         if (events.length >= maxEvents) throw new LimitExceededError('Parser emitted more than maxEvents.');
         let normalized: unknown = event;
         if (options.normalizeEvent) {
           try { normalized = options.normalizeEvent(event); }
-          catch (cause) { throw new InvalidEventError('normalizeEvent threw an error.', { cause }); }
+          catch (cause) { if (signal?.aborted) return; throw new InvalidEventError('normalizeEvent threw an error.', { cause }); }
         }
+        if (signal?.aborted) return;
         const copy = snapshot(normalized, maxOutputCharacters - characters);
         characters += copy.key.length;
         events.push(copy.value); keys.push(copy.key);
       } catch (error) {
+        if (signal?.aborted) return; // The call-level race reports cancellation without throwing from a late callback.
         emitFailure = error instanceof StreamSplitError ? error : new InvalidEventError('Could not snapshot the emitted event.', { cause: error });
         throw emitFailure;
       }
     };
     const call = async <R>(operation: () => R | PromiseLike<R>): Promise<R> => {
+      throwIfAborted();
       if (coverage.parserCalls >= maxCalls) throw new LimitExceededError('maxCalls exhausted before the check completed.');
       coverage.parserCalls++;
       const left = deadline - performance.now();
       if (left <= 0) throw new ParserTimeoutError('Parser run exceeded timeoutMs.');
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let onAbort: (() => void) | undefined;
       try {
-        const result = await Promise.race([
+        const pending: Promise<R>[] = [
           new Promise<never>((_resolve, reject) => {
             timer = setTimeout(() => reject(new ParserTimeoutError('Parser run exceeded timeoutMs. Pending parser work is not forcibly cancelled.')), Math.ceil(left));
           }),
-          Promise.resolve().then(operation),
-        ]);
+          Promise.resolve().then(() => { throwIfAborted(); return operation(); }),
+        ];
+        if (signal) pending.push(new Promise<never>((_resolve, reject) => {
+          onAbort = () => reject(new CheckAbortedError());
+          signal.addEventListener('abort', onAbort, { once: true });
+          // Also guard against a signal aborted before listener registration.
+          if (signal.aborted) onAbort();
+        }));
+        const result = await Promise.race(pending);
+        throwIfAborted();
         if (performance.now() > deadline) throw new ParserTimeoutError('Parser run exceeded timeoutMs. Synchronous JavaScript cannot be interrupted.');
         if (emitFailure) throw emitFailure;
         return result;
       } catch (error) {
+        throwIfAborted();
         if (emitFailure) throw emitFailure;
         if (performance.now() > deadline && !(error instanceof ParserTimeoutError)) throw new ParserTimeoutError('Parser run exceeded timeoutMs. Synchronous JavaScript cannot be interrupted.');
         throw error;
-      } finally { if (timer !== undefined) clearTimeout(timer); }
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        if (onAbort) signal!.removeEventListener('abort', onAbort);
+      }
     };
     let failure: JsonValue | null = null;
     let failed = false;
@@ -100,27 +121,34 @@ export async function checkChunkInvariant<T>(options: CheckOptions<T>): Promise<
       }
       if (parser.end) await call(() => parser.end!());
     } catch (error) {
+      throwIfAborted();
       if (emitFailure) throw emitFailure;
       if (error instanceof StreamSplitError) throw error;
       failed = true;
       let normalized: unknown;
       try { normalized = (options.normalizeError ?? defaultError)(error); }
-      catch (cause) { throw new InvalidEventError('normalizeError threw an error.', { cause }); }
+      catch (cause) { throwIfAborted(); throw new InvalidEventError('normalizeError threw an error.', { cause }); }
+      throwIfAborted();
       failure = snapshot(normalized, maxOutputCharacters - characters).value;
+      throwIfAborted();
       if (performance.now() > deadline) throw new ParserTimeoutError('Parser run exceeded timeoutMs during error normalization.');
-    } finally { active = false; }
+    } finally { active = false; throwIfAborted(); }
     const outcome: Outcome = { events, error: failure, failed };
     return { outcome, key: JSON.stringify([keys, failed, failure]) };
   };
   const stable = async (sizes: readonly number[], initial?: Recorded): Promise<Recorded> => {
     const first = initial ?? await run(sizes);
+    throwIfAborted();
     for (let repeat = 1; repeat < stabilityRuns; repeat++) {
-      if (!same(first, await run(sizes))) throw new NonDeterministicParserError(sizes);
+      const repeated = await run(sizes);
+      throwIfAborted();
+      if (!same(first, repeated)) throw new NonDeterministicParserError(sizes);
     }
     return first;
   };
   const baselineSizes = [input.length];
   const baseline = await stable(baselineSizes);
+  throwIfAborted();
   if (baseline.outcome.failed && errorPolicy === 'reject') throw new BaselineParserError(baseline.outcome);
   const seen = new Set<string>([String(input.length)]);
   function* schedules(): Generator<Schedule> {
@@ -132,13 +160,17 @@ export async function checkChunkInvariant<T>(options: CheckOptions<T>): Promise<
     if (seen.has(scheduleKey)) continue;
     seen.add(scheduleKey);
     const actual = await run(schedule.chunkSizes);
+    throwIfAborted();
     coverage.schedulesChecked++;
     if (schedule.chunkSizes.length === 2 && schedule.chunkSizes.every(size => size > 0)) coverage.singleCutsChecked++;
     if (schedule.chunkSizes.length === input.length && schedule.chunkSizes.every(size => size === 1)) coverage.bytewiseChecked = true;
     coverage.allSingleCutsChecked = coverage.singleCutsChecked === Math.max(0, input.length - 1);
     if (same(baseline, actual)) continue;
     await stable(schedule.chunkSizes, actual);
-    if (!same(baseline, await run(baselineSizes))) throw new NonDeterministicParserError(baselineSizes);
+    throwIfAborted();
+    const rechecked = await run(baselineSizes);
+    throwIfAborted();
+    if (!same(baseline, rechecked)) throw new NonDeterministicParserError(baselineSizes);
     let best = actual;
     let cuts = sizesToCuts(schedule.chunkSizes);
     let granularity = 2;
@@ -154,10 +186,12 @@ export async function checkChunkInvariant<T>(options: CheckOptions<T>): Promise<
         // Reserve enough lifecycle calls for this attempt and its stability check.
         if (coverage.parserCalls + stabilityRuns * (sizes.length + 2) > maxCalls) break reduction;
         const candidate = await run(sizes); shrinkRuns++;
+        throwIfAborted();
         if (!same(baseline, candidate)) {
           if (candidateCuts.length === 0) throw new NonDeterministicParserError(baselineSizes);
           for (let repeat = 1; repeat < stabilityRuns; repeat++) {
             const repeated = await run(sizes); shrinkRuns++;
+            throwIfAborted();
             if (!same(candidate, repeated)) throw new NonDeterministicParserError(sizes);
           }
           cuts = candidateCuts; best = candidate; granularity = Math.max(2, granularity - 1);
@@ -178,27 +212,32 @@ export async function checkChunkInvariant<T>(options: CheckOptions<T>): Promise<
       inputHex: Array.from(input, byte => byte.toString(16).padStart(2, '0')).join(''),
       chunkSizes: cutsToSizes(cuts, input.length), seed: config.seed, errorPolicy,
     };
+    throwIfAborted();
     return { ok: false, coverage, failure: {
       baseline: baseline.outcome, actual: best.outcome, firstDifferentEvent,
       originalChunkSizes: schedule.chunkSizes, fixture,
       shrink: { runs: shrinkRuns, complete },
     } };
   }
+  throwIfAborted();
   return { ok: true, coverage };
 }
 
 /** Throw a typed, payload-redacted assertion error on a confirmed chunk-dependent outcome. */
 export async function assertChunkInvariant<T>(options: CheckOptions<T>): Promise<Coverage> {
+  const signal = options?.signal;
   const result = await checkChunkInvariant(options);
+  if (signal?.aborted) throw new CheckAbortedError();
   if (!result.ok) throw new ChunkInvariantError(result.failure, result.coverage);
   return result.coverage;
 }
 
-export interface ReplayOptions<T> extends Pick<CheckOptions<T>, 'createParser' | 'normalizeEvent' | 'normalizeError' | 'timeoutMs' | 'stabilityRuns' | 'maxInputBytes' | 'maxEvents' | 'maxOutputCharacters' | 'maxCalls' | 'maxRuns'> {
+export interface ReplayOptions<T> extends Pick<CheckOptions<T>, 'createParser' | 'normalizeEvent' | 'normalizeError' | 'signal' | 'timeoutMs' | 'stabilityRuns' | 'maxInputBytes' | 'maxEvents' | 'maxOutputCharacters' | 'maxCalls' | 'maxRuns'> {
   fixture: ReproFixture;
 }
 /** Replay the exact bytes/schedule; a failure result confirms reproduction. Reuse your normalization hooks. */
 export async function replayChunkInvariant<T>(options: ReplayOptions<T>): Promise<CheckResult> {
+  const signal = options.signal;
   const fixture = options.fixture;
   if (!fixture || fixture.version !== 1 || typeof fixture.inputHex !== 'string' || !/^(?:[0-9a-f]{2})*$/i.test(fixture.inputHex)) throw new ConfigurationError('Invalid version-1 StreamSplit fixture.');
   integer('fixture.seed', fixture.seed, 0, 0xffffffff);
@@ -209,8 +248,10 @@ export async function replayChunkInvariant<T>(options: ReplayOptions<T>): Promis
   const sizes = validateSizes(fixture.chunkSizes, byteLength, 65536);
   const input = new Uint8Array(byteLength);
   for (let index = 0; index < byteLength; index++) input[index] = Number.parseInt(fixture.inputHex.slice(index * 2, index * 2 + 2), 16);
-  return checkChunkInvariant({ ...options, input, seed: fixture.seed, errorPolicy: fixture.errorPolicy,
+  const result = await checkChunkInvariant({ ...options, input, seed: fixture.seed, errorPolicy: fixture.errorPolicy,
     schedules: [sizes], maxSingleCuts: 0, randomCases: 0, bytewise: false, emptyChunks: false,
     maxChunkCount: Math.max(1, sizes.length), maxShrinkRuns: 0,
   });
+  if (signal?.aborted) throw new CheckAbortedError();
+  return result;
 }

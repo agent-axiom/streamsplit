@@ -26,6 +26,8 @@ export interface CheckOptions<T> extends ScheduleOptions {
   normalizeEvent?: (event: T) => JsonValue;
   /** Used with errorPolicy: 'compare'; defaults to name/message, excluding stack. */
   normalizeError?: (error: unknown) => JsonValue;
+  /** Stop checking/replay on cancellation. Does not forcibly cancel pending parser work. */
+  signal?: AbortSignal;
   maxInputBytes?: number;
   maxRuns?: number;
   maxCalls?: number;

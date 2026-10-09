@@ -1,6 +1,6 @@
 import {
   assertChunkInvariant, checkChunkInvariant, replayChunkInvariant, generateSchedules,
-  ChunkInvariantError, type ByteParser, type ParserFactory, type ReproFixture,
+  CheckAbortedError, StreamSplitError, ChunkInvariantError, type ByteParser, type ParserFactory, type ReproFixture,
 } from '../dist/index.js';
 
 const parser: ParserFactory<{ text: string }> = emit => ({
@@ -11,9 +11,14 @@ const input = new Uint8Array([1]);
 const coverage = await assertChunkInvariant({ input, createParser: parser });
 coverage.parserRuns satisfies number;
 const result = await checkChunkInvariant({ input, createParser: parser });
+const signal = new AbortController().signal;
+await assertChunkInvariant({ input, createParser: parser, signal });
+await checkChunkInvariant({ input, createParser: parser, signal });
+new CheckAbortedError() satisfies StreamSplitError;
 if (!result.ok) {
   const fixture: ReproFixture = result.failure.fixture;
   await replayChunkInvariant({ fixture, createParser: parser });
+  await replayChunkInvariant({ fixture, createParser: parser, signal });
   new ChunkInvariantError(result.failure, result.coverage);
 }
 await assertChunkInvariant({ input, createParser: (emit: (value: Date) => void): ByteParser => ({
@@ -27,3 +32,7 @@ const invalid: ByteParser = { end() {} };
 void invalid;
 // @ts-expect-error Error comparison policy is explicit.
 await checkChunkInvariant({ input, createParser: parser, errorPolicy: 'ignore' });
+// @ts-expect-error Supply the controller's signal, not the controller itself.
+await checkChunkInvariant({ input, createParser: parser, signal: new AbortController() });
+// @ts-expect-error A boolean is not an AbortSignal.
+await assertChunkInvariant({ input, createParser: parser, signal: true });
